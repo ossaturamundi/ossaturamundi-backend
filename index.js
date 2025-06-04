@@ -10,19 +10,15 @@ const port = process.env.PORT || 3000;
 app.use(cors({ origin: 'https://ossaturamundi.com' })); // Restrict to your domain
 app.use(express.json());
 
-// Backblaze B2 Configuration
 const s3Client = new S3Client({
-  region: 'us-west-001', // Backblaze region
+  region: 'us-west-001',
   endpoint: 'https://s3.us-west-001.backblazeb2.com',
   credentials: {
     accessKeyId: process.env.B2_KEY_ID,
     secretAccessKey: process.env.B2_APPLICATION_KEY
   },
-  // Disable flexible checksums to avoid unsupported headers
-  forcePathStyle: true, // Required for Backblaze B2 S3 compatibility
-  // Customize the client to disable checksum headers
+  forcePathStyle: true,
   signatureVersion: 'v4',
-  // Disable body signing to avoid checksum headers
   signRequest: (request) => {
     delete request.headers['x-amz-checksum-crc32'];
     delete request.headers['x-amz-checksum-crc32c'];
