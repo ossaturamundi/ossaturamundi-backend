@@ -9,12 +9,16 @@ const port = process.env.PORT || 3000;
 app.use(cors()); // Allow frontend to connect
 app.use(express.json()); // Parse JSON requests
 
-// Claude API Key (replace with your key)
-const claudeApiKey = 'sk-ant-...';
-const claudeApiUrl = 'https://api.anthropic.com/v1/completions'; // Example endpoint, check Anthropic's API docs for the exact URL
+// Get Claude API Key from environment variable
+const claudeApiKey = process.env.CLAUDE_API_KEY;
+const claudeApiUrl = 'https://api.anthropic.com/v1/completions'; // Replace with the correct Claude API endpoint from Anthropic's docs
 
 // Endpoint for frontend to call
 app.post('/api/claude', async (req, res) => {
+  if (!claudeApiKey) {
+    return res.status(500).json({ error: 'Claude API key is missing' });
+  }
+
   try {
     const { prompt } = req.body; // Get prompt from frontend
     if (!prompt) {
@@ -40,9 +44,14 @@ app.post('/api/claude', async (req, res) => {
     // Send Claude's response back to frontend
     res.json({ result: response.data.choices[0].text });
   } catch (error) {
-    console.error('Error calling Claude API:', error);
-    res.status(500).json({ error: 'Failed to process request' });
+    console.error('Error calling Claude API:', error.message);
+    res.status(500).json({ error: 'Failed to process request', details: error.message });
   }
+});
+
+// Optional: Add a root route to avoid "Cannot GET /"
+app.get('/', (req, res) => {
+  res.send('Backend is running! Use /api/claude to interact with Claude.');
 });
 
 // Start the server
