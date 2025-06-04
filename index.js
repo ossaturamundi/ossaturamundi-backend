@@ -10,22 +10,18 @@ const port = process.env.PORT || 3000;
 app.use(cors({ origin: 'https://ossaturamundi.com' })); // Restrict to your domain
 app.use(express.json());
 
+// Backblaze B2 Configuration
 const s3Client = new S3Client({
-  region: 'us-west-001',
   endpoint: 'https://s3.us-west-001.backblazeb2.com',
   credentials: {
     accessKeyId: process.env.B2_KEY_ID,
     secretAccessKey: process.env.B2_APPLICATION_KEY
   },
-  forcePathStyle: true,
+  forcePathStyle: true, // Required for Backblaze B2 S3 compatibility
   signatureVersion: 'v4',
-  signRequest: (request) => {
-    delete request.headers['x-amz-checksum-crc32'];
-    delete request.headers['x-amz-checksum-crc32c'];
-    delete request.headers['x-amz-checksum-sha1'];
-    delete request.headers['x-amz-checksum-sha256'];
-    return request;
-  }
+  // Disable checksum middleware to avoid unsupported headers
+  useAccelerateEndpoint: false,
+  checksumAlgorithm: undefined // Explicitly disable checksum validation
 });
 
 // Claude API Key
