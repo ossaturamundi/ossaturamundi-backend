@@ -1,7 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
-const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const AWS = require('aws-sdk');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -10,18 +10,16 @@ const port = process.env.PORT || 3000;
 app.use(cors({ origin: 'https://ossaturamundi.com' })); // Restrict to your domain
 app.use(express.json());
 
-// Backblaze B2 Configuration
-const s3Client = new S3Client({
+// Log environment variables for debugging (remove in production)
+console.log('B2_KEY_ID:', process.env.B2_KEY_ID);
+console.log('B2_APPLICATION_KEY:', process.env.B2_APPLICATION_KEY);
+
+// Backblaze B2 Configuration using aws-sdk v2
+const s3 = new AWS.S3({
   endpoint: 'https://s3.us-west-001.backblazeb2.com',
-  credentials: {
-    accessKeyId: process.env.B2_KEY_ID,
-    secretAccessKey: process.env.B2_APPLICATION_KEY
-  },
-  forcePathStyle: true, // Required for Backblaze B2 S3 compatibility
-  signatureVersion: 'v4',
-  // Disable checksum middleware to avoid unsupported headers
-  useAccelerateEndpoint: false,
-  checksumAlgorithm: undefined // Explicitly disable checksum validation
+  accessKeyId: process.env.B2_KEY_ID,
+  secretAccessKey: process.env.B2_APPLICATION_KEY,
+  s3ForcePathStyle: true // Required for Backblaze B2 S3 compatibility
 });
 
 // Claude API Key
@@ -44,8 +42,8 @@ app.post('/api/save-data', async (req, res) => {
       ServerSideEncryption: 'AES256'
     };
 
-    const command = new PutObjectCommand(params);
-    await s3Client.send(command);
+    console.log('Saving to Backblaze B2 with params:', params); // Debugging
+    await s3.putObject(params).promise();
     res.json({ success: true });
   } catch (error) {
     console.error('Error saving to Backblaze B2:', error);
@@ -66,18 +64,13 @@ app.get('/api/get-data', async (req, res) => {
       Key: `user-data/${userId}.json`
     };
 
-    const command = new GetObjectCommand(params);
-    const response = await s3Client.send(command);
-
-    const chunks = [];
-    for await (const chunk of response.Body) {
-      chunks.push(chunk);
-    }
-    const encryptedData = Buffer.concat(chunks).toString();
+    console.log('Retrieving from Backblaze B2 with params:', params); // Debugging
+    const response = await s3.getObject(params).promise();
+    const encryptedData = response.Body.toString();
 
     res.json({ data: encryptedData });
   } catch (error) {
-    if (error.name === 'NoSuchKey') {
+    if (error.code === 'NoSuchKey') {
       res.json({ data: null }); // No data yet for this user
     } else {
       console.error('Error retrieving from Backblaze B2:', error);
