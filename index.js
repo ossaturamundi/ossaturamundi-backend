@@ -15,8 +15,20 @@ const s3Client = new S3Client({
   region: 'us-west-001', // Backblaze region
   endpoint: 'https://s3.us-west-001.backblazeb2.com',
   credentials: {
-    accessKeyId: process.env.B2_KEY_ID, // e.g., '001...'
-    secretAccessKey: process.env.B2_APPLICATION_KEY // e.g., 'K00...'
+    accessKeyId: process.env.B2_KEY_ID,
+    secretAccessKey: process.env.B2_APPLICATION_KEY
+  },
+  // Disable flexible checksums to avoid unsupported headers
+  forcePathStyle: true, // Required for Backblaze B2 S3 compatibility
+  // Customize the client to disable checksum headers
+  signatureVersion: 'v4',
+  // Disable body signing to avoid checksum headers
+  signRequest: (request) => {
+    delete request.headers['x-amz-checksum-crc32'];
+    delete request.headers['x-amz-checksum-crc32c'];
+    delete request.headers['x-amz-checksum-sha1'];
+    delete request.headers['x-amz-checksum-sha256'];
+    return request;
   }
 });
 
@@ -27,17 +39,17 @@ const claudeApiUrl = 'https://api.anthropic.com/v1/messages';
 // Save Data to Backblaze B2
 app.post('/api/save-data', async (req, res) => {
   try {
-    const { userId, data } = req.body; // userId to scope data per user
+    const { userId, data } = req.body;
     if (!userId || !data) {
       return res.status(400).json({ error: 'userId and data are required' });
     }
 
     const params = {
       Bucket: 'MysticX-QG',
-      Key: `user-data/${userId}.json`, // Scope by userId
-      Body: data, // Data is already encrypted client-side with crypto-js
+      Key: `user-data/${userId}.json`,
+      Body: data,
       ContentType: 'application/json',
-      ServerSideEncryption: 'AES256' // Enable server-side encryption
+      ServerSideEncryption: 'AES256'
     };
 
     const command = new PutObjectCommand(params);
@@ -65,7 +77,6 @@ app.get('/api/get-data', async (req, res) => {
     const command = new GetObjectCommand(params);
     const response = await s3Client.send(command);
 
-    // Read the data stream
     const chunks = [];
     for await (const chunk of response.Body) {
       chunks.push(chunk);
