@@ -1,62 +1,51 @@
 const express = require('express');
-const AWS = require('aws-sdk');
-const Anthropic = require('@anthropic-ai/sdk');
-const crypto = require('crypto');
+const axios = require('axios');
+const cors = require('cors');
+
 const app = express();
-app.use(express.json());
+const port = process.env.PORT || 3000;
 
-// Configurer Backblaze B2 (S3-compatible)
-const s3 = new AWS.S3({
-    endpoint: 'https://s3.us-west-001.backblazeb2.com',
-    accessKeyId: '001...', // Remplace par ton Key ID
-    secretAccessKey: 'K00...', // Remplace par ton Application Key
-    signatureVersion: 'v4'
-});
+// Middleware
+app.use(cors()); // Allow frontend to connect
+app.use(express.json()); // Parse JSON requests
 
-// Configurer Anthropic (Claude)
-const anthropic = new Anthropic({
-    apiKey: 'sk-ant-...', // Remplace par ta clé API Claude
-});
+// Claude API Key (replace with your key)
+const claudeApiKey = 'sk-ant-...';
+const claudeApiUrl = 'https://api.anthropic.com/v1/completions'; // Example endpoint, check Anthropic's API docs for the exact URL
 
-// Fonction pour chiffrer les données
-function encrypt(text) {
-    const algorithm = 'aes-256-ctr';
-    const secretKey = 'vOVH6sdmpNWjRRIqCc7rdxs01lwHzfr3'; // Clé secrète (change-la !)
-    const iv = crypto.randomBytes(16);
-    const cipher = crypto.createCipheriv(algorithm, secretKey, iv);
-    const encrypted = Buffer.concat([cipher.update(text), cipher.final()]);
-    return `${iv.toString('hex')}:${encrypted.toString('hex')}`;
-}
-
-app.post('/api/chat', async (req, res) => {
-    const { category, message } = req.body;
-
-    try {
-        // Appeler Claude 4 Sonnet (on utilise Claude 3.5 Sonnet car Claude 4 n’est pas disponible)
-        const response = await anthropic.messages.create({
-            model: 'claude-3.5-sonnet-20241022',
-            max_tokens: 1024,
-            messages: [{ role: 'user', content: message }]
-        });
-        const reply = response.content[0].text;
-
-        // Chiffrer la conversation
-        const conversation = encrypt(JSON.stringify({ message, reply }));
-        
-        // Sauvegarder dans Backblaze B2
-        const params = {
-            Bucket: 'MysticX-QG',
-            Key: `${category}/conversation-${Date.now()}.json`,
-            Body: conversation
-        };
-        await s3.upload(params).promise();
-
-        res.json({ response: reply });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Erreur lors de l’appel à Claude ou Backblaze' });
+// Endpoint for frontend to call
+app.post('/api/claude', async (req, res) => {
+  try {
+    const { prompt } = req.body; // Get prompt from frontend
+    if (!prompt) {
+      return res.status(400).json({ error: 'Prompt is required' });
     }
+
+    // Make request to Claude API
+    const response = await axios.post(
+      claudeApiUrl,
+      {
+        model: 'claude-4-sonnet', // Specify the model
+        prompt: prompt,
+        max_tokens: 100, // Adjust as needed
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${claudeApiKey}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    // Send Claude's response back to frontend
+    res.json({ result: response.data.choices[0].text });
+  } catch (error) {
+    console.error('Error calling Claude API:', error);
+    res.status(500).json({ error: 'Failed to process request' });
+  }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Serveur démarré sur le port ${PORT}`));
+// Start the server
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
+});
